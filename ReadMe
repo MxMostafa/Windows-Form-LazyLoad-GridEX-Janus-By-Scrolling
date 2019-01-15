@@ -1,0 +1,110 @@
+//Only Work With Entity FrameWork
+////////////////////////////////////////////// How to Use
+customGrridEx1.DbContext = db;   //Select Context For Get Data
+            customGrridEx1.FetchData<Item>();  //Item Is Entity And Load all Recoord From Items Table
+            customGrridEx1.LazyLoadByScroll = true; //If True Lazy Load Enable
+            customGrridEx1.ScrollEnd += (a, b) =>
+            {
+                customGrridEx1.FetchData<Item>();
+                label1.Text = customGrridEx1.TotalRecord + @"/" + customGrridEx1.CurrentRecordLoaded;  // Show Records  ===> 1000/20
+            };
+////////////////////////////////////////////
+//////////////// How To Work
+
+/////////////// Create New User Control From GridEX Janus
+ public partial class CustomGrridEx : GridEX
+    {
+        #region Scroll Property
+        public bool LazyLoadByScroll { get; set; }
+        public int LoadRowPerScrollEnd { get; set; } = 100; //If Scroll End Load 100 Record Again. And Can Change
+        public DbContext DbContext { get; set; }
+        private readonly List<object> dataList = new List<object>();
+        public Action<int, int> ScrollEnd { get; set; }
+        public int TotalRecord { get; private set; }
+        public int CurrentRecordLoaded { get; private set; }
+        private bool firstInitialize = true;
+        public string IdName { get; set; } = "Id";  //  Lambda Check Property  ==>  Items.Where(p=>p.Id>0 && p.Id<=100).ToList .  Id Can Change
+        #endregion
+        
+        public CustomGrridEx()
+        {
+            InitializeComponent();
+            MouseWheel += CustomGrridEx_Scroll;  //Mouse Wheel Change Event
+        }
+
+        private int lastScrollPosition;
+        private bool scrolling ;
+        private void CustomGrridEx_Scroll(object sender, EventArgs e)
+        {
+            try
+            {
+                
+                if (!LazyLoadByScroll) return;
+                if (scrolling)return;
+                scrolling = true;
+                if (lastScrollPosition != VerticalScrollPosition || VerticalScrollPosition==0)
+                {
+                    scrolling = false;
+                    return;
+                }
+                var index = RowCount;
+                ScrollEnd?.Invoke(lastScrollPosition, RowCount);
+                Refetch();
+                Row = index;
+                scrolling = false;
+            }
+            catch 
+            {
+                scrolling = false;
+            }
+            finally
+            {
+                lastScrollPosition = VerticalScrollPosition;
+
+            }
+        }
+
+        public void FetchData<T>() where T : class
+        {
+            try
+            {
+                if (firstInitialize)
+                    TotalRecord = DbContext.Set<T>().Count();
+                dataList.AddRange(DbContext.Set<T>().Where(CreateExpersion<T>()).ToList());
+                DataSource = dataList;
+                CurrentRecordLoaded = dataList.Count;
+                Refetch();
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine(exception);
+
+            }
+            finally
+            {
+                firstInitialize = false;
+            }
+        }
+        
+        //Create Lambda.........
+        private Expression<Func<T, bool>> CreateExpersion<T>() where T : class
+        {
+            try
+            {
+                ParameterExpression argParam = Expression.Parameter(typeof(T), "p");
+                Expression idProperty = Expression.Property(argParam, IdName);
+                var val1 = Expression.Constant(RowCount);
+                var val2 = Expression.Constant(RowCount + LoadRowPerScrollEnd);
+                Expression e1 = Expression.GreaterThan(idProperty, val1);
+                Expression e2 = Expression.LessThan(idProperty, val2);
+                var andExp = Expression.AndAlso(e1, e2);
+                return Expression.Lambda<Func<T, bool>>(andExp, argParam);
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine(exception);
+                return null;
+            }
+
+        }
+    }
